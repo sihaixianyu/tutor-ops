@@ -1,0 +1,21 @@
+{
+    "version": 3,
+    "configurePresets": [
+        {
+            "name": "dev",
+            "displayName": "dev",
+            "generator": "Ninja",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_TOOLCHAIN_FILE": "$env{HOME}/Projects/app/vcpkg/scripts/buildsystems/vcpkg.cmake"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "dev",
+            "configurePreset": "dev"
+        }
+    ]
+}

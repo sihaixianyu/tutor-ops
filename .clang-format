@@ -1,0 +1,71 @@
+# Global
+Language: Cpp
+BasedOnStyle: Google
+ColumnLimit: 120
+
+# Indent
+UseTab: Never
+IndentWidth: 4
+SortIncludes: false
+
+# Break
+AlwaysBreakAfterDefinitionReturnType: None
+AlwaysBreakBeforeMultilineStrings: false
+BreakBeforeBinaryOperators: None
+BreakBeforeTernaryOperators: true
+BreakConstructorInitializers: BeforeColon
+BreakStringLiterals: true
+BreakBeforeBraces: Custom
+
+# Brace
+BraceWrapping:
+  AfterClass: false
+  AfterControlStatement: false
+  AfterEnum: false
+  AfterFunction: false
+  AfterNamespace: false
+  AfterStruct: false
+  AfterUnion: false
+  AfterExternBlock: false
+  BeforeCatch: false
+  BeforeElse: false
+  IndentBraces: false
+
+# Block
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortEnumsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+AllowShortLambdasOnASingleLine: Inline
+
+# Comment
+AlignTrailingComments: true
+
+# Operator
+PointerAlignment: Left
+AlignOperands: Align
+DerivePointerAlignment: false
+
+# Function
+BinPackArguments: true
+BinPackParameters: true
+AlignAfterOpenBracket: Align
+AllowAllParametersOfDeclarationOnNextLine: false
+AllowAllArgumentsOnNextLine: false
+IndentWrappedFunctionNames: false
+Standard: Latest
+
+# Class
+AccessModifierOffset: -4
+ContinuationIndentWidth: 4
+ConstructorInitializerIndentWidth: 4
+PackConstructorInitializers: CurrentLine
+Cpp11BracedListStyle: true
+
+# Namespace
+CompactNamespaces: false
+FixNamespaceComments: true
+
+# Others
+AlignArrayOfStructures: Left

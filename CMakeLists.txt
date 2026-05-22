@@ -1,43 +1,20 @@
-cmake_minimum_required(VERSION 3.28)
+cmake_minimum_required(VERSION 3.20)
 
-project(cuda_add LANGUAGES CXX CUDA)
-
-set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
-
-enable_testing()
+project(ops LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 set(CMAKE_CUDA_STANDARD 17)
 set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+set(CMAKE_CUDA_USE_RESPONSE_FILE_FOR_INCLUDES OFF)
 
-add_library(cuda_add STATIC
-    src/add.cu
-)
+find_package(fmt REQUIRED)
 
-target_include_directories(cuda_add
-    PUBLIC
-        ${CMAKE_CURRENT_SOURCE_DIR}/include
-)
+add_executable(vec_add src/add/vec_add.cu)
+target_include_directories(vec_add PRIVATE include)
+target_link_libraries(vec_add PRIVATE fmt::fmt)
 
-set_target_properties(cuda_add PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    CUDA_ARCHITECTURES native
-)
-
-add_executable(test_add
-    test/test_add.cu
-)
-
-target_link_libraries(test_add
-    PRIVATE
-        cuda_add
-)
-
-set_target_properties(test_add PROPERTIES
-    CUDA_SEPARABLE_COMPILATION ON
-    CUDA_ARCHITECTURES native
-)
-
-add_test(NAME test_add COMMAND test_add)
-set_tests_properties(test_add PROPERTIES SKIP_RETURN_CODE 77)
+add_executable(vec_add_float4 src/add/vec_add_float4.cu)
+target_include_directories(vec_add_float4 PRIVATE include)
+target_link_libraries(vec_add_float4 PRIVATE fmt::fmt)
