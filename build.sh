@@ -3,7 +3,7 @@
 set -eu
 
 if [ "${1:-}" = "-r" ]; then
-    rm -rf build
+    rm -rf build/CMakeCache.txt build/CMakeFiles
     shift
 fi
 

@@ -1,2 +1,2 @@
-add_executable(reduce reduce.cu)
-target_link_libraries(reduce PRIVATE fmt::fmt)
+add_executable(sum sum.cu)
+target_link_libraries(sum PRIVATE fmt::fmt)

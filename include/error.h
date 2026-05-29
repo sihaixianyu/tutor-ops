@@ -4,12 +4,14 @@
 
 #include <fmt/core.h>
 
-#define CHECK_ERR(err) check_cuda_err(err, __FILE__, __LINE__)
+#define CHECK_ERR(err) util::check_err(err, __FILE__, __LINE__)
 
-inline void check_cuda_err(cudaError_t error, const char* file, int line) {
+namespace util {
+inline auto check_err(cudaError_t error, const char* file, int line) -> void {
     if (error != cudaSuccess) {
-        fmt::println("[CUDA ERROR] at file {}(line {}):\n{}\n", file, line, cudaGetErrorString(error));
+        fmt::println("[ERROR] <{}:{}> Failed to exec cuda op due to '{}'.", file, line, cudaGetErrorString(error));
         exit(EXIT_FAILURE);
     }
     return;
-};
+}
+}  // namespace util
