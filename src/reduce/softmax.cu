@@ -2,6 +2,7 @@
 #include <cfloat>
 #include <cstdlib>
 #include <tuple>
+#include <numeric>
 #include <vector>
 
 #include <cuda_runtime.h>
@@ -16,6 +17,10 @@ namespace {
 constexpr auto N = 1024 * 1024 * 8;
 constexpr auto BLOCK_SIZE = 256;
 constexpr auto REPEAT_TIME = 256;
+
+__device__ static float atomic_max(float* addr, float val) {
+    return 0;
+}
 
 __global__ void max_warp(float* x, float* y, int n) {
     __shared__ float buf[32];
@@ -46,10 +51,16 @@ __global__ void max_warp(float* x, float* y, int n) {
     }
 }
 
-// TODO: Implement basic softmax kernel here.
-__global__ void softmax(float* x, float* y, int n) {
-    auto tid = threadIdx.x;
+__global__ void sum_warp(float* x, float* y, float* max_val, int n) {
+    __shared__ float buf[32];
+}
+
+__global__ void softmax(float* x, float* y, float* sum_exp, float* max_val, int n) {
     auto idx = blockDim.x * blockIdx.x + threadIdx.x;
+    if (idx >= n)
+        return;
+
+    y[idx] = expf(x[idx] - *max_val) / (*sum_exp);
 }
 
 auto host_softmax(const std::vector<float>& x) -> std::tuple<std::vector<float>, float> {
@@ -64,40 +75,37 @@ auto host_softmax(const std::vector<float>& x) -> std::tuple<std::vector<float>,
             result[i] = std::exp(x[i] - max_val) / sum_exp;
         }
     });
-    return {result, elapsed};
+    return {std::move(result), elapsed};
 }
 
 template <typename Kernel>
-auto dev_softmax(Kernel kernel, float* x_d, float* y_d) -> std::tuple<float, float> {
+auto dev_softmax(Kernel kernel, float* x_d, float* y_d) -> std::tuple<std::vector<float>, float> {
     auto grid_size = util::ceil_div(N, BLOCK_SIZE);
     auto elapsed = util::time_device(REPEAT_TIME, [&]() {
-        CHECK_ERR(cudaMemset(y_d, 0, sizeof(float)));
-        kernel<<<grid_size, BLOCK_SIZE>>>(x_d, y_d, N);
         CHECK_ERR(cudaGetLastError());
         CHECK_ERR(cudaDeviceSynchronize());
     });
 
-    auto result = 0.0f;
-    CHECK_ERR(cudaMemcpy(&result, y_d, sizeof(float), cudaMemcpyDeviceToHost));
-    return {result, elapsed};
+    auto result = std::vector<float>(N);
+    CHECK_ERR(cudaMemcpy(result.data(), y_d, N * sizeof(float), cudaMemcpyDeviceToHost));
+    return {std::move(result), elapsed};
 }
 }  // namespace
 
 int main() {
-    auto x = std::vector<float>(N);
-    for (auto i = 0; i < N; i++) {
-        x[i] = i;
-    }
-
+    auto x_h = std::vector<float>(N);
+    auto y_h = std::vector<float>(N);
     auto x_d = static_cast<float*>(nullptr);
     auto y_d = static_cast<float*>(nullptr);
     CHECK_ERR(cudaMalloc((void**)&x_d, N * sizeof(float)));
     CHECK_ERR(cudaMalloc((void**)&y_d, N * sizeof(float)));
-    CHECK_ERR(cudaMemcpy(x_d, x.data(), N * sizeof(float), cudaMemcpyHostToDevice));
 
-    auto [host_result, host_elapsed] = host_softmax(x);
+    std::iota(x_h.begin(), x_h.end(), 0.0f);
+    CHECK_ERR(cudaMemcpy(x_d, x_h.data(), N * sizeof(float), cudaMemcpyHostToDevice));
+
+    auto [host_result, host_elapsed] = host_softmax(x_h);
     auto run = [&, host_result = host_result, host_elapsed = host_elapsed](const char* name, auto kernel) -> bool {
-        auto [y, device_elapsed] = dev_softmax(kernel, x_d, y_d);
+        auto [y_h, device_elapsed] = dev_softmax(kernel, x_d, y_d);
         return true;
     };
 
