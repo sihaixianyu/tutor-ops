@@ -8,7 +8,7 @@
 
 namespace util {
 template <typename Func>
-auto time_host(const int N, const Func& func) -> float {
+auto time_cpu(const int N, const Func& func) -> float {
     auto total_time = 0.0f;
 
     for (auto repeat = 0; repeat < N; repeat++) {
@@ -25,7 +25,7 @@ auto time_host(const int N, const Func& func) -> float {
 }
 
 template <typename Func>
-auto time_device(const int N, const Func& func) -> float {
+auto time_cuda(const int N, const Func& func) -> float {
     float total_time = 0.0f;
 
     for (int repeat = 0; repeat < N; ++repeat) {

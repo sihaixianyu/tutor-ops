@@ -80,14 +80,14 @@ __global__ void sum_warp(int* x, long long* y, int n) {
 
 auto host_sum(const std::vector<int>& x) -> std::tuple<long long, float> {
     auto result = 0LL;
-    auto elapsed = util::time_host(REPEAT_TIME, [&]() { result = std::accumulate(x.begin(), x.end(), 0LL); });
+    auto elapsed = util::time_cpu(REPEAT_TIME, [&]() { result = std::accumulate(x.begin(), x.end(), 0LL); });
     return {result, elapsed};
 }
 
 template <typename Kernel>
 auto dev_sum(Kernel kernel, int* x_d, long long* y_d) -> std::tuple<long long, float> {
     auto grid_size = util::ceil_div(N, BLOCK_SIZE);
-    auto elapsed = util::time_device(REPEAT_TIME, [&]() {
+    auto elapsed = util::time_cuda(REPEAT_TIME, [&]() {
         CHECK_ERR(cudaMemset(y_d, 0, sizeof(long long)));
         kernel<<<grid_size, BLOCK_SIZE>>>(x_d, y_d, N);
         CHECK_ERR(cudaGetLastError());

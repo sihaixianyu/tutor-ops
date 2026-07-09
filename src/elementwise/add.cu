@@ -46,7 +46,7 @@ __global__ void add_float4(float* a, float* b, float* c, int n) {
 
 auto host_add(const std::vector<float>& a, const std::vector<float>& b) -> std::tuple<std::vector<float>, float> {
     auto c = std::vector<float>(N);
-    auto elapsed = util::time_host(REPEAT_TIME, [&]() {
+    auto elapsed = util::time_cpu(REPEAT_TIME, [&]() {
         for (auto i = 0; i < N; i++) {
             c[i] = a[i] + b[i];
         }
@@ -57,7 +57,7 @@ auto host_add(const std::vector<float>& a, const std::vector<float>& b) -> std::
 template <typename Kernel>
 auto dev_add(Kernel kernel, int grid_size, float* a_d, float* b_d, float* c_d)
     -> std::tuple<std::vector<float>, float> {
-    auto elapsed = util::time_device(REPEAT_TIME, [&]() {
+    auto elapsed = util::time_cuda(REPEAT_TIME, [&]() {
         kernel<<<grid_size, BLOCK_SIZE>>>(a_d, b_d, c_d, N);
         CHECK_ERR(cudaGetLastError());
         CHECK_ERR(cudaDeviceSynchronize());
