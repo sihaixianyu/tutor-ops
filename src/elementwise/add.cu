@@ -1,3 +1,4 @@
+#include <cmath>
 #include <tuple>
 #include <vector>
 
@@ -6,14 +7,42 @@
 #include <fmt/core.h>
 
 #include "calc.h"
+#include "cmp.h"
 #include "error.h"
 #include "timer.h"
 
-namespace {
 constexpr auto N = 1024 * 1024 * 8;
 constexpr auto BLOCK_SIZE = 256;
 constexpr auto REPEAT_TIME = 256;
 
+namespace host {
+auto add_host(const std::vector<float>& a, const std::vector<float>& b) -> std::tuple<std::vector<float>, float> {
+    auto c = std::vector<float>(N);
+    auto elapsed = util::time_cpu(REPEAT_TIME, [&]() {
+        for (auto i = 0; i < N; i++) {
+            c[i] = a[i] + b[i];
+        }
+    });
+    return {c, elapsed};
+}
+}  // namespace host
+
+namespace device {
+template <typename Kernel>
+auto add_device(Kernel kernel, int grid_size, float* a_d, float* b_d, float* c_d)
+    -> std::tuple<std::vector<float>, float> {
+    auto elapsed = util::time_cuda(REPEAT_TIME, [&]() {
+        kernel<<<grid_size, BLOCK_SIZE>>>(a_d, b_d, c_d, N);
+        CHECK_ERR(cudaGetLastError());
+        CHECK_ERR(cudaDeviceSynchronize());
+    });
+
+    auto result = std::vector<float>(N);
+    CHECK_ERR(cudaMemcpy(result.data(), c_d, N * sizeof(float), cudaMemcpyDeviceToHost));
+    return {result, elapsed};
+}
+
+// Elementwise add, one element per thread.
 __global__ void add(float* a, float* b, float* c, int n) {
     auto idx = blockDim.x * blockIdx.x + threadIdx.x;
     if (idx >= n)
@@ -22,6 +51,7 @@ __global__ void add(float* a, float* b, float* c, int n) {
     c[idx] = a[idx] + b[idx];
 }
 
+// Vectorized add: 4 elements per thread via float4 loads/stores.
 __global__ void add_float4(float* a, float* b, float* c, int n) {
     auto idx = (blockDim.x * blockIdx.x + threadIdx.x) * 4;
     if (idx >= n)
@@ -43,31 +73,7 @@ __global__ void add_float4(float* a, float* b, float* c, int n) {
         c[i] = a[i] + b[i];
     }
 }
-
-auto host_add(const std::vector<float>& a, const std::vector<float>& b) -> std::tuple<std::vector<float>, float> {
-    auto c = std::vector<float>(N);
-    auto elapsed = util::time_cpu(REPEAT_TIME, [&]() {
-        for (auto i = 0; i < N; i++) {
-            c[i] = a[i] + b[i];
-        }
-    });
-    return {c, elapsed};
-}
-
-template <typename Kernel>
-auto dev_add(Kernel kernel, int grid_size, float* a_d, float* b_d, float* c_d)
-    -> std::tuple<std::vector<float>, float> {
-    auto elapsed = util::time_cuda(REPEAT_TIME, [&]() {
-        kernel<<<grid_size, BLOCK_SIZE>>>(a_d, b_d, c_d, N);
-        CHECK_ERR(cudaGetLastError());
-        CHECK_ERR(cudaDeviceSynchronize());
-    });
-
-    auto result = std::vector<float>(N);
-    CHECK_ERR(cudaMemcpy(result.data(), c_d, N * sizeof(float), cudaMemcpyDeviceToHost));
-    return {result, elapsed};
-}
-}  // namespace
+}  // namespace device
 
 int main() {
     auto a_h = std::vector<float>(N);
@@ -77,7 +83,8 @@ int main() {
         b_h[i] = N - 1 - i;
     }
 
-    auto [host_result, host_elapsed] = host_add(a_h, b_h);
+    auto [host_result, cpu_elapsed] = host::add_host(a_h, b_h);
+    fmt::println("[host] elapsed_time={} ms", cpu_elapsed);
 
     auto a_d = static_cast<float*>(nullptr);
     auto b_d = static_cast<float*>(nullptr);
@@ -88,31 +95,22 @@ int main() {
     CHECK_ERR(cudaMemcpy(a_d, a_h.data(), N * sizeof(float), cudaMemcpyHostToDevice));
     CHECK_ERR(cudaMemcpy(b_d, b_h.data(), N * sizeof(float), cudaMemcpyHostToDevice));
 
-    auto run = [&, host_result = host_result, host_elapsed = host_elapsed](const char* name, auto kernel,
-                                                                           int grid_size) -> bool {
-        auto [dev_result, device_elapsed] = dev_add(kernel, grid_size, a_d, b_d, c_d);
+    auto [device_result_naive, naive_elapsed] = device::add_device(device::add, util::ceil_div(N, BLOCK_SIZE), a_d, b_d, c_d);
+    constexpr auto eps = 1e-6f;
+    auto [naive_ok, naive_max_idx] = util::cmp_vec(device_result_naive, host_result, eps);
+    auto naive_max_diff = std::fabs(host_result[naive_max_idx] - device_result_naive[naive_max_idx]);
+    fmt::println("[device::naive] elapsed_time={} ms, result=[{}, {}], diff={:.10e}", naive_elapsed,
+                host_result[naive_max_idx], device_result_naive[naive_max_idx], naive_max_diff);
+    if (!naive_ok) return -1;
 
-        for (auto i = 0; i < N; i++) {
-            if (dev_result[i] != host_result[i]) {
-                fmt::println("{}:\n Err[host={}, device={}]: {} != {} at index {}", name, host_elapsed, device_elapsed,
-                             dev_result[i], host_result[i], i);
-                return false;
-            }
-        }
-
-        fmt::println("{}:\n Ok[host={}, device={}]: {} == {}", name, host_elapsed, device_elapsed, dev_result[0],
-                     host_result[0]);
-        return true;
-    };
-
-    if (!run("add", add, util::ceil_div(N, BLOCK_SIZE))) {
-        return -1;
-    }
-
-    auto grid_size = util::ceil_div(util::ceil_div(N, 4), BLOCK_SIZE);
-    if (!run("add_float4", add_float4, grid_size)) {
-        return -1;
-    }
+    auto float4_grid_size = util::ceil_div(util::ceil_div(N, 4), BLOCK_SIZE);
+    auto [device_result_float4, float4_elapsed] =
+        device::add_device(device::add_float4, float4_grid_size, a_d, b_d, c_d);
+    auto [float4_ok, float4_max_idx] = util::cmp_vec(device_result_float4, host_result, eps);
+    auto float4_max_diff = std::fabs(host_result[float4_max_idx] - device_result_float4[float4_max_idx]);
+    fmt::println("[device::float4] elapsed_time={} ms, result=[{}, {}], diff={:.10e}", float4_elapsed,
+                host_result[float4_max_idx], device_result_float4[float4_max_idx], float4_max_diff);
+    if (!float4_ok) return -1;
 
     CHECK_ERR(cudaFree(a_d));
     CHECK_ERR(cudaFree(b_d));
